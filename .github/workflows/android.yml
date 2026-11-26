@@ -1,0 +1,30 @@
+name: Android build
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - run: ./gradlew assembleDebug bundleRelease
+      - name: Validate packets and saved state
+        run: |
+          mkdir -p build/protocol-tests
+          curl --fail --location https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar -o build/protocol-tests/json.jar
+          javac -encoding UTF-8 -cp build/protocol-tests/json.jar -d build/protocol-tests app/src/main/java/dev/civic/signalcheck/AmbientProtocol.java app/src/main/java/dev/civic/signalcheck/LightingState.java tests/ProtocolTest.java
+          java -cp build/protocol-tests/json.jar:build/protocol-tests dev.civic.signalcheck.ProtocolTest build/protocol-tests/vectors.json
+          python3 tests/compare_protocol.py build/protocol-tests/vectors.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: civic-ambient-android
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/bundle/release/*.aab

@@ -1,0 +1,172 @@
+DYNAMIC AMBIENT LIGHTING: RECREATED BLUETOOTH PROTOCOL
+
+Scope and evidence
+Decoded from archived com.findn.htx version 1.1.1 (111), not the current
+com.mingmao.htx package. Identified via the installation video linked by
+SynthCarbon: https://www.youtube.com/watch?v=r4D1na-B_aw&t=2283s
+Archive: https://apkpure.net/dynamic-ambient-lighting/com.findn.htx/download
+Package identity is confirmed in the downloaded manifest; compatibility with
+the user's physical controller has not yet been tested.
+
+Transport
+Service:        0000ffc0-0000-1000-8000-00805f9b34fb
+Write:          0000ffc1-0000-1000-8000-00805f9b34fb
+Notifications:  0000ffc2-0000-1000-8000-00805f9b34fb
+Writes use write-without-response. These are controller GATT UUIDs, not
+Bluetooth pairing profiles. Discover services and confirm the characteristic
+properties before sending. Enable notifications/CCCD, then send the connected
+packet. The app uses a separate UUID family for sub-box setup; that is not
+needed for ordinary color control through an already configured master.
+
+Framing (all notation hexadecimal unless explicitly decimal)
+FC LL CC [DATA...] KK FA
+LL = 1 + number of data bytes (command included in length).
+KK = bitwise complement of (LL + CC + sum(DATA)), masked to 8 bits.
+Equivalently, LL + CC + sum(DATA) + KK = FF modulo 256.
+The initial FC and final FA are excluded from the checksum.
+No encryption/authentication step occurs in these traced command paths.
+This does not establish whether the controller enforces other BLE security.
+
+Commands
+00  no data: connected/state request. Packet FC 01 00 FE FA.
+01  no data: request effect/settings state. Packet FC 01 01 FD FA.
+02  [brightness1 brightness2]: decimal 0..100 each.
+03  [rgbMode1 rgbMode2]: RGB effect IDs below.
+04  [R1 G1 B1 R2 G2 B2]: decimal 0..255 per channel.
+05  [power]: 00 off, 01 on.
+06  [microphoneSensitivity]: UI uses decimal 0..100.
+07  [rgbSpeed]: decimal 1..5; slider progress + 1.
+22  [packedFlow]: mode | (zeroBasedVariant << 4).
+23  [flowSpeed]: decimal 0..5, direct slider progress.
+24  [direction]: 00 or 01. Physical direction requires hardware confirmation.
+
+Zones
+The UI calls them Unite, Part one, Part Two. Unite copies values to both
+zones; it is not a separate wire command. In the linked installation guide,
+part one corresponds to strips; part two to footwell/handle/pocket lights.
+Changing just one zone still transmits BOTH zones' values. Read state first
+and preserve the untouched zone. The RGB-mode UI sends the same mode ID to
+both zones; separate values are supported by its packet builder but their
+independent physical behavior remains untested.
+
+RGB mode IDs (command 03, decimal)
+0 Monochrome / solid
+1 Gradient
+2 Breathe
+3 Strobe
+4 Automatic
+6 Rhythm
+The sixth UI item maps to wire ID 6, NOT 5.
+
+Flow mode IDs (command 22; decimal IDs, hexadecimal wire byte in brackets)
+10 [0A] Sync part1, variant 0; Sync part2, variant 1 [1A]
+11 [0B] Colorful
+12 [0C] Music rhythm
+13 [0D] Seven Colors
+14 [0E] Cool Dynamic
+ 4 [04] Colorful Meteor
+ 5 [05] Colorful Sport
+ 6 [06] Colorful Shadow
+ 7 [07] Colorful trailing
+ 8 [08] Colorful light waves
+ 9 [09] Colorful pile
+Effect buttons 01..06 map to variants 0..5 in the HIGH nibble.
+Example: Colorful effect 02 => 0B | 10 = 1B.
+The UI hides unsupported variants by firmware: older controllers expose
+only effects 01..03 for music rhythm and generally 01..05 for other modes;
+newer controllers can expose 01..06. Sync has the special zone semantics
+above. Never infer that every mode/variant works on every controller.
+
+Notifications / state synchronization
+The APK recognizes FC 0E 00 ... and FC 10 00 ... as RGB state.
+Zero-based byte indexes:
+3 brightness1; 4 rgbMode1; 5..7 RGB1;
+8 brightness2; 9 rgbMode2; 10..12 RGB2;
+13 power (nonzero on); 14 microphone sensitivity;
+15 RGB speed only for the FC 10 00 form.
+It recognizes FC 07 01 ... and FC 10 01 ... as effect/settings state:
+byte 3 low nibble = flow mode; high nibble = variant.
+byte 4 low nibble = flow speed; high nibble = direction.
+Other bytes include configuration fields outside this implementation's scope.
+Interpret byte data unsigned. The original Java sometimes sign-extends
+colors; the wire bytes still represent unsigned RGB.
+Check actual received length before accessing fields. The generalized
+outgoing frame/checksum rule has not been confirmed with captured incoming
+notifications, so validate against captures before enforcing it on replies.
+
+Suggested first hardware test (parked)
+1. Close the phone's lighting app and connect our GATT client to the master.
+2. Subscribe to FFC2, then send connected() and requestEffects().
+3. Cache both zones' actual colors, brightness, mode, and power.
+4. Select Sync part1 (22,0A), RGB Monochrome (03,00,00), modest brightness,
+   then a known solid color. Verify the exact order against the controller;
+   these are a proposed test sequence, not a captured transaction trace.
+5. Restore the cached settings after testing.
+Serialize writes; no packet requires more than the default 20-byte ATT
+payload. Use throttling/coalescing for sliders and RPM color updates. A
+write callback alone does not confirm that a no-response command was applied.
+
+Dynamic vehicle behavior: planned, not implemented
+Vehicle confirmed by user: 2027 Honda Civic Sport Touring Hybrid sedan.
+Honda lists ECON/Normal/Sport/Individual plus Honda S+ Shift. S+ Shift
+simulates a performance transmission; do not treat it as a conventional
+S shifter position or assume standard GEAR_SELECTION exposes its status.
+The four drive modes can map to user-chosen solid-color profiles if a readable
+mode signal exists. An S+ Shift active signal can enable an RPM color ramp,
+returning to the active profile when S+ Shift is disabled. Do not infer
+S+ activation or drive mode from RPM alone.
+The current decoded commands change whole zones; individually addressed
+LED segments needed for a filling rev bar are not established.
+RPM thresholds must be configured for the exact engine/transmission. Engine
+RPM alone does not prove an optimal shift point, especially with CVT/hybrid
+behavior. On missing/stale RPM or mode data, restore a steady profile.
+
+Access to vehicle data remains an independent feasibility check. A Play
+Console developer account does not grant Honda system permissions. Inspect
+AAOS property availability/permissions first; manufacturer-specific mode
+properties and RPM access may be restricted. An external read-only vehicle
+data adapter is a fallback only if the required signals and adequate update
+latency are demonstrated on this car.
+
+Verification
+Python reference output compared to original DEX arithmetic, branches and
+byte-array stores using a narrowly scoped interpreter; Bluetooth send calls
+were intercepted and never executed. Checked every brightness pair 0..100,
+each supported RGB-mode pair, boundary/sweep/random color inputs, the listed
+flow variants, and speed/power/sensitivity values. Kotlin encoder uses the
+same protocol but has not been compiled in this environment. No controller,
+car, BLE timing, or head-unit installation test has been performed.
+
+Checks passed: 13955
+Base APK SHA256: 351c78fa64d24a9b75a6539bdcff5af5dfb87e557f38c5614a75d40659146437
+XAPK SHA256: a5f5c14d4dd08b9ee93eea673309923fc7c39903a4989db99cc8f78e1d8a4af9
+
+Example packets
+connected: FC 01 00 FE FA
+request_effect_state: FC 01 01 FD FA
+power_on: FC 02 05 01 F7 FA
+power_off: FC 02 05 00 F8 FA
+both_red: FC 07 04 FF 00 00 FF 00 00 F6 FA
+both_blue: FC 07 04 00 00 FF 00 00 FF F6 FA
+both_50_percent: FC 03 02 32 32 96 FA
+monochrome: FC 03 03 00 00 F9 FA
+breathe: FC 03 03 02 02 F5 FA
+sync_part_one: FC 02 22 0A D1 FA
+sync_part_two: FC 02 22 1A C1 FA
+colorful_effect_1: FC 02 22 0B D0 FA
+colorful_effect_2: FC 02 22 1B C0 FA
+
+Source evidence locations (in APK)
+MyApplication.sendDataToDevice / sendDataToDeviceByMac: UUIDs/writeNoRsp.
+MyApplication.sendRgbColor/sendBrightness/sendMode/sendFlowMode: payloads.
+MyApplication.sendPowerOnOff/sendRgbSpeed/sendSpeed/sendDirection: controls.
+MyApplication$2.onConnectStatusChanged: subscribe and connected message.
+MyApplication$2$2.onNotify: state byte indexes and firmware distinction.
+RGBFragment$2.onStopTrackingTouch: per-zone brightness preservation.
+RGBFragment$3.onStopTrackingTouch: RGB speed offset.
+RGBFragment.lambda$initView$8: RGB mode mapping including Rhythm=6.
+ModeFragment.lambda$initView$14..20: flow IDs and high-nibble variants.
+res/layout/fragment_rgb.xml, fragment_mode.xml + string resources: UI names.
+
+2027 model source: https://www.hondainfocenter.com/2027/Civic-Sedan/Feature-Guide/Feature-Highlights/
+S+ Shift source: https://hondanews.com/en-US/releases/release-62166a21f970e5815b4639c6270080bf-2027-honda-civic-advances-americas-best-selling-compact-car-with-new-sport-l-trim-and-available-s-shift-drive-mode
