@@ -1,0 +1,15 @@
+Honda Civic 2022 (Free Download)
+Creator: Ricy / Alexandros Papadopoulos (@ngon_3d)
+https://sketchfab.com/ngon_3d
+Source: https://sketchfab.com/3d-models/honda-civic-2022-free-download-d5ca29a5d2f341b691118ffb5560b19b
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+
+Downloaded through the creator's official Sketchfab download on 2026-11-25.
+Changes: legacy specular/glossiness materials converted to approximate glTF
+metallic/roughness PBR. Model scaled, rotated and recolored at runtime;
+roof/glazing and upper exterior panels hidden/clipped for the cabin view.
+Ambient lighting overlays are original additions, not part of the source model.
+
+This is a 2022 Civic artist model, not an exact 2027 Sport Touring Hybrid CAD
+asset. No endorsement by Honda or the artist is implied.

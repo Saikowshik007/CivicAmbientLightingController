@@ -77,7 +77,7 @@ public final class MainActivity extends Activity {
     private void sendInitial(){
         JSONObject initial=new JSONObject();JSONArray looks=new JSONArray();
         try{for(Map.Entry<String,LightingState> e:LightingState.builtIns().entrySet())looks.put(new JSONObject().put("name",e.getKey()).put("state",e.getValue().toJson()));
-            initial.put("state",state.toJson()).put("presets",presets).put("looks",looks).put("connection",controller.snapshot()).put("native",true).put("version","0.2.0");
+            initial.put("state",state.toJson()).put("presets",presets).put("looks",looks).put("connection",controller.snapshot()).put("native",true).put("version","0.2.1");
         }catch(JSONException ignored){}emit("initial",initial);
     }
     private void toast(String message){emit("message",message);}

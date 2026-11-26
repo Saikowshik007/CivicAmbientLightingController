@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const native=typeof window.Native?.postMessage==='function';
 const defaults={colorA:0x28d9e8,colorB:0xa36cff,brightnessA:45,brightnessB:45,modeA:0,modeB:0,speed:3,flowMode:4,variant:0,flowSpeed:3,direction:0,power:true,linked:true,flow:false};
-let state={...defaults},connection={ready:false,status:native?'Not connected':'Browser preview • Bluetooth is available in the Android app',devices:[],submitted:0},presets=[],looks=[],zone=0,page='color',scene=null,inputAction=null,toastTimer;
+let state={...defaults},connection={ready:false,status:native?'Not connected':'Browser preview • Bluetooth is available in the Android app',devices:[],submitted:0},presets=[],looks=[],zone=0,page='color',scene=null,locationFocus='all',inputAction=null,toastTimer;
 const clone=value=>JSON.parse(JSON.stringify(value));
 const hex=value=>'#'+value.toString(16).padStart(6,'0').toUpperCase();
 const palettes=[0x28d9e8,0x3978ff,0x9b65ff,0xf369c5,0xff506c,0xff973b,0xf5df7b,0xd3eddf,0xe9ecff];
@@ -47,7 +47,7 @@ function render(){
  $('flow-mode').value=state.flow?String(state.flowMode):'';
  $('variant').replaceChildren();for(let i=0;i<(state.flowMode===10?2:6);i++){const option=new Option(String(i+1),String(i));$('variant').add(option);}$('variant').value=String(state.variant);$('variant').disabled=!state.flow;$('direction').value=String(state.direction);$('direction').disabled=!state.flow;
  $('speed').min=state.flow?'0':'1';$('speed').max='5';$('speed').value=state.flow?state.flowSpeed:state.speed;$('speed-label').textContent=$('speed').value;
- $('look-caption').textContent=!state.power?'Lighting preview is off.':state.flow?'Flow effect selected · colors previewed below.':'Two zones. One personal space.';
+ $('look-caption').textContent=!state.power?'Lighting preview is off.':state.flow?'Flow effect selected · colors previewed below.':'Dash & door strips. Handles, storage & footwells.';
  drawWheel();scene?.update(state);renderConnection();renderLooks();
 }
 function renderConnection(){
@@ -56,7 +56,7 @@ function renderConnection(){
  $('command-state').textContent=connection.ready?'Connected. Changes are sent when you use a control.':'Settings are local until a controller is connected.';
  $('scan-status').textContent=connection.scanning?'Scanning for 10 seconds…':connection.status;
  $('scan').disabled=!!connection.scanning;$('disconnect').disabled=!connection.ready&&!connection.device;
- $('details-text').textContent=`${native?'Civic Ambient 0.2.0':'Browser preview'}\n${connection.status}\nDevice: ${connection.device||'None'}\nCommands submitted: ${connection.submitted||0}\nLast write: ${connection.lastWrite||'None'}\nLast notification: ${connection.lastNotification||'None'}\n\nService: FFC0 · Write: FFC1 · Notify: FFC2`;
+ $('details-text').textContent=`${native?'Civic Ambient 0.2.1':'Browser preview'}\n${connection.status}\nDevice: ${connection.device||'None'}\nCommands submitted: ${connection.submitted||0}\nLast write: ${connection.lastWrite||'None'}\nLast notification: ${connection.lastNotification||'None'}\n\nService: FFC0 · Write: FFC1 · Notify: FFC2`;
 }
 for(const color of palettes){const b=document.createElement('button');b.className='swatch';b.dataset.color=String(color);b.style.background=hex(color);b.setAttribute('aria-label','Set color '+hex(color));b.onclick=()=>{setColor(color);commit();};$('palette').append(b);}
 for(const [name,value] of rgbEffects){const b=document.createElement('button');b.dataset.effect=String(value);b.textContent=name;b.onclick=()=>{state.flow=false;if(state.linked||zone===0)state.modeA=value;if(state.linked||zone===1)state.modeB=value;render();commit();};$('rgb-effects').append(b);}
@@ -92,10 +92,14 @@ function drawWheel(){const canvas=$('color-wheel'),ctx=canvas.getContext('2d'),s
 let wheelDragging=false;
 function wheelPoint(e){const rect=$('color-wheel').getBoundingClientRect(),x=(e.clientX-rect.left)/rect.width*320-160,y=(e.clientY-rect.top)/rect.height*320-160;setColor(hsvColor((Math.atan2(y,x)*180/Math.PI+360)%360,Math.min(1,Math.hypot(x,y)/148)));}
 $('color-wheel').onpointerdown=e=>{wheelDragging=true;$('color-wheel').setPointerCapture(e.pointerId);wheelPoint(e);};$('color-wheel').onpointermove=e=>{if(wheelDragging)wheelPoint(e);};$('color-wheel').onpointerup=()=>{if(wheelDragging){wheelDragging=false;commit();}};$('color-wheel').onpointercancel=()=>{wheelDragging=false;};
-$('view-cabin').onclick=()=>{scene?.setView('cabin');$('view-cabin').classList.add('selected');$('view-exterior').classList.remove('selected');};$('view-exterior').onclick=()=>{scene?.setView('exterior');$('view-exterior').classList.add('selected');$('view-cabin').classList.remove('selected');};$('reset-view').onclick=()=>scene?.reset();
+$('view-cabin').onclick=()=>{scene?.setView('perspective');$('view-cabin').classList.add('selected');$('view-plan').classList.remove('selected');$('view-car').classList.remove('selected');};
+$('view-plan').onclick=()=>{scene?.setView('plan');$('view-plan').classList.add('selected');$('view-cabin').classList.remove('selected');$('view-car').classList.remove('selected');};$('reset-view').onclick=()=>scene?.reset();
+$('view-car').onclick=()=>{scene?.setView('exterior');$('view-car').classList.add('selected');$('view-cabin').classList.remove('selected');$('view-plan').classList.remove('selected');};
+const locationCaptions={all:'Preview locations · controls adjust the two groups below.',dash:'Dash line · strip group preview.',doors:'Door lines · strip group preview.',handles:'Door handles · accent group preview.',storage:'Door storage pockets · accent group preview.',footwells:'Front & rear footwells · accent group preview.'};
+document.querySelectorAll('[data-location]').forEach(button=>button.onclick=()=>{locationFocus=button.dataset.location;if($('view-car').classList.contains('selected')){$('view-car').classList.remove('selected');$('view-cabin').classList.add('selected');}scene?.setFocus(locationFocus);$('location-caption').textContent=locationCaptions[locationFocus];document.querySelectorAll('[data-location]').forEach(b=>{b.classList.toggle('active',b===button);b.setAttribute('aria-pressed',String(b===button));});});
 if(!native){
  try{state={...defaults,...JSON.parse(localStorage.getItem('ambient-preview-state')||'{}')};presets=JSON.parse(localStorage.getItem('ambient-preview-presets')||'[]');}catch{}
  const names=['Glacier','Violet hour','Ember','Ocean','Rose','Clean white'],colors=[[0x28d9e8,0x3978ff],[0x9755ff,0xf05ca8],[0xff7a30,0xffbd69],[0x126bff,0x28d9e8],[0xff4c84,0xff97b2],[0xffead2,0xffead2]];looks=names.map((name,i)=>({name,state:{...defaults,colorA:colors[i][0],colorB:colors[i][1],linked:false}}));
 }
 render();send({type:'ready'});
-import('./scene.js').then(module=>{scene=module.createScene($('scene'));scene.update(state);}).catch(error=>{$('scene-fallback').hidden=false;console.warn('3D preview unavailable',error);});
+import('./scene.js').then(async module=>{scene=await module.createScene($('scene'));scene.update(state);scene.setFocus(locationFocus);scene.setView($('view-car').classList.contains('selected')?'exterior':$('view-plan').classList.contains('selected')?'plan':'cabin');}).catch(error=>{$('scene-fallback').hidden=false;console.warn('3D preview unavailable',error);});
